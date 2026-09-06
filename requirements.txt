@@ -1,0 +1,15 @@
+streamlit
+pandas
+openpyxl
+sqlalchemy
+pymysql
+python-dotenv
+langchain
+langchain-community
+langchain-openai
+langchain-google-genai
+chromadb
+langchain-chroma
+langchain-huggingface
+sentence-transformers
+torch
