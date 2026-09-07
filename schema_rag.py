@@ -1,33 +1,38 @@
-from database import get_schema
+
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 
 
-def create_schema_documents():
-    schema = get_schema()
-
+def create_schema_rag(schema):
     documents = []
 
     for table, columns in schema.items():
         documents.append(
             f"Table: {table}\n"
-            f"Columns: {', '.join(columns)}\n"
+            f"Columns: {', '.join(columns)}"
         )
 
-    return documents
+    embeddings = HuggingFaceEmbeddings(
+        model_name="all-MiniLM-L6-v2"
+    )
+
+    vector_db = Chroma.from_texts(
+        texts=documents,
+        embedding=embeddings
+    )
+
+    return vector_db
 
 
-documents = create_schema_documents()
+def retrieve_schema(vector_db, question):
+    results = vector_db.similarity_search(
+        question,
+        k=3
+    )
 
-embeddings = HuggingFaceEmbeddings(
-    model_name="all-MiniLM-L6-v2"
-)
+    schema_text = "\n\n".join(
+        document.page_content
+        for document in results
+    )
 
-vector_db = Chroma.from_texts(
-    texts=documents,
-    embedding=embeddings,
-    persist_directory="./chroma_db"
-)
-
-print("Schema RAG database created successfully!")
-print(f"Documents stored: {len(documents)}")
+    return schema_text
