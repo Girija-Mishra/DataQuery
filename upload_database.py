@@ -1,12 +1,8 @@
 import pandas as pd
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect
 
 
 def create_upload_database(df):
-    """
-    Create a temporary SQLite database
-    from the uploaded DataFrame.
-    """
 
     engine = create_engine(
         "sqlite:///uploaded_data.db"
@@ -23,11 +19,6 @@ def create_upload_database(df):
 
 
 def get_upload_schema(engine):
-    """
-    Get table and column information.
-    """
-
-    from sqlalchemy import inspect
 
     inspector = inspect(engine)
 

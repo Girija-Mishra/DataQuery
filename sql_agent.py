@@ -5,14 +5,7 @@ from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 from sqlalchemy import create_engine, inspect, text
 
-from database import engine as mysql_engine
-
 load_dotenv()
-
-
-# --------------------------------------------------
-# GEMINI
-# --------------------------------------------------
 
 llm = ChatGoogleGenerativeAI(
     model="gemini-3.6-flash",
@@ -21,37 +14,30 @@ llm = ChatGoogleGenerativeAI(
 )
 
 
-# --------------------------------------------------
-# GET ACTIVE DATABASE
-# --------------------------------------------------
-
 def get_active_engine():
-
-    # If uploaded dataset exists, use SQLite
+    """
+    Use the SQLite database created from the uploaded dataset.
+    """
     if os.path.exists("uploaded_data.db"):
+        return create_engine("sqlite:///uploaded_data.db")
 
-        return create_engine(
-            "sqlite:///uploaded_data.db"
-        )
+    return None
 
-    # Otherwise use MySQL
-    return mysql_engine
-
-
-# --------------------------------------------------
-# GET SCHEMA
-# --------------------------------------------------
 
 def get_active_schema():
-
+    """
+    Extract the schema from the uploaded SQLite database.
+    """
     engine = get_active_engine()
+
+    if engine is None:
+        return {}
 
     inspector = inspect(engine)
 
     schema = {}
 
     for table in inspector.get_table_names():
-
         columns = inspector.get_columns(table)
 
         schema[table] = [
@@ -62,13 +48,14 @@ def get_active_schema():
     return schema
 
 
-# --------------------------------------------------
-# RETRIEVE RELEVANT SCHEMA
-# --------------------------------------------------
-
 def retrieve_schema(question):
-
+    """
+    Return the database schema for Gemini.
+    """
     schema = get_active_schema()
+
+    if not schema:
+        return "No dataset has been uploaded."
 
     schema_text = ""
 
@@ -82,15 +69,16 @@ def retrieve_schema(question):
     return schema_text
 
 
-# --------------------------------------------------
-# GENERATE SQL
-# --------------------------------------------------
-
 def generate_sql(question):
 
-    relevant_schema = retrieve_schema(question)
-
     engine = get_active_engine()
+
+    if engine is None:
+        raise ValueError(
+            "Please upload a CSV or Excel file first."
+        )
+
+    relevant_schema = retrieve_schema(question)
 
     dialect = engine.dialect.name
 
@@ -105,14 +93,22 @@ User question:
 
 {question}
 
-Generate ONLY the SQL query needed to answer the question.
+Generate ONLY the SQL query required to answer the question.
 
 Rules:
-- Use only tables and columns from the schema.
+
+- Use only tables and columns from the provided schema.
 - Never invent columns.
+- The uploaded data table is called uploaded_data.
 - Never modify the database.
-- Never use INSERT, UPDATE, DELETE, DROP, ALTER,
-  TRUNCATE, CREATE, REPLACE.
+- Never use INSERT.
+- Never use UPDATE.
+- Never use DELETE.
+- Never use DROP.
+- Never use ALTER.
+- Never use TRUNCATE.
+- Never use CREATE.
+- Never use REPLACE.
 - Return only SQL.
 - Do not use markdown.
 """
@@ -121,7 +117,6 @@ Rules:
 
     content = response.content
 
-    # Gemini sometimes returns structured content
     if isinstance(content, list):
 
         sql = ""
@@ -135,12 +130,11 @@ Rules:
                 sql += item
 
     else:
-
         sql = str(content)
 
     sql = sql.strip()
 
-    # Remove markdown if Gemini adds it
+    # Remove markdown code fences if Gemini returns them
     sql = re.sub(
         r"```sql|```",
         "",
@@ -150,10 +144,6 @@ Rules:
 
     return sql
 
-
-# --------------------------------------------------
-# SQL SAFETY
-# --------------------------------------------------
 
 def validate_sql(sql):
 
@@ -168,7 +158,7 @@ def validate_sql(sql):
         "replace"
     ]
 
-    sql_lower = sql.lower()
+    sql_lower = sql.lower().strip()
 
     for word in forbidden:
 
@@ -176,7 +166,6 @@ def validate_sql(sql):
             rf"\b{word}\b",
             sql_lower
         ):
-
             return False
 
     return (
@@ -185,19 +174,19 @@ def validate_sql(sql):
     )
 
 
-# --------------------------------------------------
-# EXECUTE SQL
-# --------------------------------------------------
-
 def execute_query(sql):
 
     if not validate_sql(sql):
-
         raise ValueError(
             "Unsafe SQL query blocked."
         )
 
     engine = get_active_engine()
+
+    if engine is None:
+        raise ValueError(
+            "Please upload a CSV or Excel file first."
+        )
 
     with engine.connect() as connection:
 
@@ -213,34 +202,3 @@ def execute_query(sql):
         ]
 
     return columns, rows
-
-
-# --------------------------------------------------
-# TEST
-# --------------------------------------------------
-
-if __name__ == "__main__":
-
-    question = (
-        "Find the highest sputtering yield value"
-    )
-
-    print("\nDatabase schema:")
-
-    print(
-        retrieve_schema(question)
-    )
-
-    sql = generate_sql(question)
-
-    print("\nGenerated SQL:")
-
-    print(sql)
-
-    columns, rows = execute_query(sql)
-
-    print("\nResult:")
-
-    print(columns)
-
-    print(rows)
